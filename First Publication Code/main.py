@@ -46,3 +46,8 @@ Watchdog.train_network(network=ae,
                        train_y=train_y,
                        early_stopping=E_STOP
                        )
+
+(images, labels) = Watchdog.apply_watchdog(ae, (mix_dist_img, mix_dist_lab), threshold=4.5)
+(loss, accuracy) = Watchdog.evaluate_network(classifier, (images, labels))
+print("Evaluated Loss: ", loss)
+print("Evaluated Accuracy: ", accuracy)

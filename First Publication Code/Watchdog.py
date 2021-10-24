@@ -1,6 +1,7 @@
 import tensorflow as tf
 from tensorflow.keras import activations, datasets, layers, models, utils
 import numpy as np
+import matplotlib.pyplot as plt
 from sklearn.metrics import roc_curve
 
 
@@ -133,7 +134,7 @@ def build_autoencoder(input_shape, layer_filters, ks, latent_dim):
 
     # Build the Decoder
     latent_input = tf.keras.layers.Input(shape=(latent_dim,),
-                                          name='decoder_input')
+                                         name='decoder_input')
 
     x = tf.keras.layers.Dense(shape[1] * shape[2] * shape[3])(latent_input)
     x = tf.keras.layers.Reshape((shape[1], shape[2], shape[3]))(x)
@@ -150,7 +151,7 @@ def build_autoencoder(input_shape, layer_filters, ks, latent_dim):
 
     decoder = tf.keras.Model(latent_input, outputs, name='decoder')
 
-    autoencoder = tf.keras.Model(encoder, decoder, name = 'autoencoder')
+    autoencoder = tf.keras.Model(encoder, decoder, name='autoencoder')
 
     return autoencoder
 
@@ -180,3 +181,61 @@ def train_network(network, epochs, batch_size, train_x, train_y, early_stopping)
                 callbacks=[callbacks],
                 )
 
+
+def apply_watchdog(autoencoder_model, dataset, threshold=1.0):
+    """
+    This function applies an autoencoder watchdog to the provided dataset with a configurable threshold.
+    :param autoencoder_model: The pre-trained autoencoder used to regenerate input data.
+    :param dataset: The dataset used in coordination with the applied watchdog (images, labels).
+    :param threshold: The threshold value for the watchdog.
+    :return: Returns a dataset containing the values permitted by the watchdog (images, labels).
+    """
+
+    images, labels = dataset  # split out images and labels
+    guarded_images, guarded_labels = [], []  # Create empty dataset arrays
+
+    regenerated_images = autoencoder_model.predict(images)
+
+    for i in range(len(images)):
+        real = np.squeeze(images[i])
+        pred = np.squeeze(regenerated_images[i])
+        if image_rmse(real, pred) < threshold:
+            guarded_images.append(images[i])
+            guarded_labels.append(labels[i])
+
+    return np.array(guarded_images), np.array(guarded_labels)
+
+
+def evaluate_network(network, dataset):
+    """
+    This function evaluates a network using the supplied dataset. This function produces accuracy and loss values, as
+    well as produce the ROC curves for each class.
+    :param network: The network being evaluated.
+    :param dataset: The dataset used for network evaluation.
+    :return: Accuracy Percentage and Loss Value
+    """
+
+    fpr = dict()
+    tpr = dict()
+    images, labels = dataset
+    label_predictions = network.predict(images)
+    [loss, accuracy] = network.evaluate(images, labels)
+
+    for i in range(10):
+        fpr[i], tpr[i], _ = roc_curve(labels[:, i], label_predictions[:, i])
+    fpr["micro"], tpr["micro"], _ = roc_curve(labels.ravel(), label_predictions.ravel())
+
+    plt.figure()
+    for i in range(10):
+        plt.plot(fpr[i], tpr[i], label='Class: %.0f' % i)
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.legend()
+    plt.show()
+
+    plt.figure()
+    plt.plot(fpr["micro"], tpr["micro"], label='Aggregate Performance')
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.legend()
+    plt.show()
